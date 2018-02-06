@@ -1,0 +1,17 @@
+<library path="src">
+  <class name="FlexBeInterfacePlugin" type="hector_flexbe_rqt_widget.flexbe_interface_widget.FlexBeInterfacePlugin" base_class_type="rqt_gui_py::Plugin">
+    <description>
+      Basic FlexBE interface
+    </description>
+    <qtgui>
+      <group>
+        <label>FlexBE</label>
+        <icon type="theme">folder</icon>
+      </group>
+      <label>FlexBE Interface</label>
+      <icon>resource/flexbe_logo.png</icon>
+      <statustip>Basic FlexBE interface</statustip>
+    </qtgui>
+  </class>
+</library>
+
