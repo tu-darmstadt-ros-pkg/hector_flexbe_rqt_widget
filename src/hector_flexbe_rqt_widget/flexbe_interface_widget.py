@@ -16,6 +16,8 @@ from std_msgs.msg import Empty, Bool, UInt8, String
 from flexbe_core import BehaviorLibrary
 from flexbe_msgs.msg import BEStatus, BehaviorExecutionAction, BehaviorExecutionGoal
 
+from hector_flexbe_rqt_widget.table_widget import TableWidget
+
 
 class FlexBeInterfacePlugin(Plugin):
 
@@ -54,16 +56,18 @@ class FlexBeWidget(QWidget):
         loadUi(ui_file, self, {'QWidget': QWidget})
         self.setObjectName('FlexBeInterfaceUi')
 
+        # init table widgets
+        self._argument_table_widget = TableWidget(self.argumentTableWidget)
+        self._userdata_table_widget = TableWidget(self.userdataTableWidget)
+
         # connect to signals
         self.executePushButton.clicked[bool].connect(self._execute_button_pressed)
         self.pausePushButton.clicked[bool].connect(self._pause_button_pressed)
         self.abortPushButton.clicked[bool].connect(self._abort_button_pressed)
         self.attachPushButton.clicked[bool].connect(self._attach_button_pressed)
         self.autonomyComboBox.currentIndexChanged[int].connect(lambda index: self._autonomy_pub.publish(index))
-        self.argumentTableWidget.itemChanged[QTableWidgetItem].connect(lambda item: self._table_widget_enter_pressed(self.argumentTableWidget, item))
-        self.userdataTableWidget.itemChanged[QTableWidgetItem].connect(lambda item: self._table_widget_enter_pressed(self.userdataTableWidget, item))
-        self.clearArgumentPushButton.clicked[bool].connect(lambda: self._clear_table_widget(self.argumentTableWidget))
-        self.clearUserdataPushButton.clicked[bool].connect(lambda: self._clear_table_widget(self.userdataTableWidget))
+        self.clearArgumentPushButton.clicked[bool].connect(self._argument_table_widget.clear)
+        self.clearUserdataPushButton.clicked[bool].connect(self._userdata_table_widget.clear)
         self.clearLogPushButton.clicked[bool].connect(self.logTextEdit.clear)
         self.saveLogPushButton.clicked[bool].connect(self._save_log)
 
@@ -73,10 +77,6 @@ class FlexBeWidget(QWidget):
         self.setPauseButtonText.connect(self.pausePushButton.setText)
         self.updateStateLog.connect(self.logTextEdit.append)
         self.clearStateLog.connect(self.logTextEdit.clear)
-
-        # init table widgets
-        self._init_table_widget(self.argumentTableWidget)
-        self._init_table_widget(self.userdataTableWidget)
 
         # init behavior list
         self._lib = BehaviorLibrary()
@@ -170,17 +170,17 @@ class FlexBeWidget(QWidget):
         goal.behavior_name = self.behaviorsListWidget.currentItem().text()
 
         # add behavior arguments
-        for row in range(0, self.argumentTableWidget.rowCount()):
-            key = self.argumentTableWidget.item(row, 0).text()
-            value = self.argumentTableWidget.item(row, 1).text()
+        args = self._argument_table_widget.get_entries()
+        for key in args:
+            value = args[key]
             if key and value:
                 goal.arg_keys.append(key)
                 goal.arg_values.append(value)
 
         # add initial userdata
-        for row in range(0, self.userdataTableWidget.rowCount()):
-            key = self.userdataTableWidget.item(row, 0).text()
-            value = self.userdataTableWidget.item(row, 1).text()
+        args = self._userdata_table_widget.get_entries()
+        for key in args:
+            value = args[key]
             if key and value:
                 goal.input_keys.append(key)
                 goal.input_values.append(value)
@@ -235,78 +235,6 @@ class FlexBeWidget(QWidget):
         self.behaviorsListWidget.addItems(names)
         self.behaviorsListWidget.sortItems()
         self.executePushButton.setEnabled(enabled and self.behaviorsListWidget.count() > 0)
-
-    def _create_cell_push_button(self, text, clicked_cb, icon=None):
-        widget = QWidget()
-
-        button = QPushButton()
-        button.setText(text)
-        if icon:
-            button.setIcon(icon)
-        button.clicked[bool].connect(clicked_cb)
-
-        hlayout = QHBoxLayout(widget)
-        hlayout.addWidget(button)
-        hlayout.setAlignment(Qt.AlignCenter)
-        hlayout.setContentsMargins(0, 0, 0, 0)
-
-        widget.setLayout(hlayout)
-        return widget
-
-    def _init_table_widget(self, tableWidget):
-        tableWidget.blockSignals(True)
-
-        tableWidget.setRowCount(1)
-        tableWidget.setColumnCount(3)
-
-        tableWidget.verticalHeader().setVisible(False)
-        tableWidget.setHorizontalHeaderLabels(['Key', 'Value', ''])
-        tableWidget.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        tableWidget.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeToContents)
-
-        tableWidget.setItem(0, 0, QTableWidgetItem())
-        tableWidget.setItem(0, 1, QTableWidgetItem())
-        tableWidget.setItem(0, 2, QTableWidgetItem())
-        tableWidget.item(0, 2).setFlags(Qt.NoItemFlags)
-        tableWidget.setCellWidget(0, 2, self._create_cell_push_button('', lambda: self._add_entry(tableWidget), QIcon.fromTheme('list-add')))
-
-        tableWidget.blockSignals(False)
-
-    def _clear_table_widget(self, tableWidget):
-        tableWidget.setRowCount(1)
-        self._init_table_widget(tableWidget)
-
-    def _add_entry(self, tableWidget):
-        tableWidget.blockSignals(True)
-
-        # insert new row
-        tableWidget.insertRow(tableWidget.rowCount()-1)
-
-        # move key and value items up
-        tableWidget.setItem(tableWidget.rowCount()-2, 0, tableWidget.takeItem(tableWidget.rowCount()-1, 0))
-        tableWidget.setItem(tableWidget.rowCount()-2, 1, tableWidget.takeItem(tableWidget.rowCount()-1, 1))
-        tableWidget.setItem(tableWidget.rowCount()-1, 0, QTableWidgetItem())
-        tableWidget.setItem(tableWidget.rowCount()-1, 1, QTableWidgetItem())
-
-        # add 'remove' button
-        item = QTableWidgetItem()
-        item.setFlags(Qt.NoItemFlags)
-        tableWidget.setItem(tableWidget.rowCount()-2, 2, item)
-        tableWidget.setCellWidget(tableWidget.rowCount()-2, 2,
-                                  self._create_cell_push_button('', lambda: tableWidget.removeRow(item.row()), QIcon.fromTheme('list-remove')))
-
-        tableWidget.blockSignals(False)
-
-    def _table_widget_enter_pressed(self, tableWidget, item):
-        if item.column() == 0:
-            index = tableWidget.indexFromItem(tableWidget.item(item.row(), item.column()+1))
-        elif item.row() < tableWidget.rowCount()-1:
-            index = tableWidget.indexFromItem(tableWidget.item(item.row()+1, item.column()-1))
-        else:
-            index = tableWidget.indexFromItem(tableWidget.item(0, 0))
-
-        tableWidget.setCurrentIndex(index)
-        tableWidget.edit(index)
 
     def _save_log(self):
         dialog = QFileDialog()
